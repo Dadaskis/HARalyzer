@@ -1,4 +1,5 @@
 <image width="64px" src="public/icon.svg"/>
+
 # HARalyzer
 
 *Official, polite version*: Desktop app for analyzing HAR (HTTP Archive) files with LLM assistance via [OpenRouter](https://openrouter.ai/).
