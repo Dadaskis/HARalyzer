@@ -1,0 +1,94 @@
+# Logs
+
+logs
+
+*.log
+
+npm-debug.log*
+
+yarn-debug.log*
+
+yarn-error.log*
+
+pnpm-debug.log*
+
+lerna-debug.log*
+
+
+
+# Dependencies
+
+node_modules
+
+
+
+# Build outputs
+
+dist
+
+dist-ssr
+
+*.local
+
+
+
+# Release exports (built installers — run export.bat / export.sh)
+
+export/
+
+
+
+# Tauri / Rust
+
+src-tauri/target
+
+src-tauri/gen
+
+
+
+# IDE / editor
+
+.cursor/
+
+.vscode/*
+
+!.vscode/extensions.json
+
+.idea
+
+*.suo
+
+*.ntvs*
+
+*.njsproj
+
+*.sln
+
+*.sw?
+
+
+
+# OS
+
+.DS_Store
+
+Thumbs.db
+
+
+
+# App data (local dev)
+
+*.db
+
+*.db-journal
+
+
+
+# Env secrets
+
+.env
+
+.env.*
+
+!.env.example
+
