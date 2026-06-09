@@ -6,7 +6,7 @@
 
 *Cooler version*: A kick-ass HAR viewer with agentic AI that can produce impactful AI slop to learn more about ANY HAR exports. Truly revolutionary, made by me for myself <3
 
-<image width="500px" src="public/screenshot.png"/>
+<image width="800px" src="public/screenshot.png"/>
 
 ## Features
 
