@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.11 0.04 285);
+  --foreground: oklch(0.97 0.02 280);
+  --card: oklch(0.16 0.06 290 / 0.72);
+  --card-foreground: oklch(0.97 0.02 280);
+  --popover: oklch(0.15 0.06 290);
+  --popover-foreground: oklch(0.97 0.02 280);
+  --primary: oklch(0.72 0.26 295);
+  --primary-foreground: oklch(0.99 0.01 280);
+  --secondary: oklch(0.22 0.08 290);
+  --secondary-foreground: oklch(0.95 0.03 280);
+  --muted: oklch(0.2 0.06 288);
+  --muted-foreground: oklch(0.72 0.08 290);
+  --accent: oklch(0.28 0.12 310);
+  --accent-foreground: oklch(0.97 0.02 280);
+  --destructive: oklch(0.62 0.26 25);
+  --border: oklch(0.55 0.14 295 / 0.35);
+  --input: oklch(0.22 0.08 290 / 0.8);
+  --ring: oklch(0.72 0.26 295);
+  --bloom-violet: oklch(0.62 0.28 295);
+  --bloom-magenta: oklch(0.58 0.26 330);
+  --bloom-cyan: oklch(0.62 0.18 230);
+  --bloom-pink: oklch(0.65 0.24 350);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.58 0.22 295 / 0.65) oklch(0.14 0.045 290);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: oklch(0.13 0.045 290);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      oklch(0.62 0.24 295 / 0.85),
+      oklch(0.58 0.22 330 / 0.75)
+    );
+    border: 2px solid oklch(0.13 0.045 290);
+    border-radius: 999px;
+    box-shadow: 0 0 10px oklch(0.55 0.22 295 / 0.35);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(
+      180deg,
+      oklch(0.68 0.26 295),
+      oklch(0.64 0.24 330)
+    );
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: oklch(0.13 0.045 290);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Layered ambient bloom — fixed behind all UI */
+.bloom-bg {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: oklch(0.1 0.045 285);
+}
+
+.bloom-bg::before,
+.bloom-bg::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  filter: blur(80px);
+  opacity: 0.85;
+  animation: bloom-drift 18s ease-in-out infinite alternate;
+}
+
+.bloom-bg::before {
+  background:
+    radial-gradient(circle at 15% 20%, oklch(0.55 0.32 295 / 0.55) 0%, transparent 45%),
+    radial-gradient(circle at 85% 15%, oklch(0.52 0.28 330 / 0.45) 0%, transparent 40%),
+    radial-gradient(circle at 70% 75%, oklch(0.5 0.22 260 / 0.4) 0%, transparent 42%),
+    radial-gradient(circle at 25% 80%, oklch(0.55 0.26 350 / 0.38) 0%, transparent 38%);
+}
+
+.bloom-bg::after {
+  background:
+    radial-gradient(circle at 50% 45%, oklch(0.48 0.24 290 / 0.35) 0%, transparent 50%),
+    radial-gradient(circle at 90% 60%, oklch(0.5 0.2 230 / 0.3) 0%, transparent 35%);
+  animation-duration: 24s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes bloom-drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    transform: translate(2%, -1.5%) scale(1.04);
+  }
+}
+
+.scanline-overlay {
+  position: relative;
+  z-index: 1;
+}
+
+.scanline-overlay::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    oklch(0 0 0 / 0.025) 2px,
+    oklch(0 0 0 / 0.025) 4px
+  );
+  mix-blend-mode: overlay;
+}
+
+.scanline-overlay::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: radial-gradient(ellipse at center, transparent 55%, oklch(0.06 0.03 285 / 0.45) 100%);
+}
+
+@layer utilities {
+  .bloom-panel {
+    background: oklch(0.16 0.06 290 / 0.55);
+    border-color: oklch(0.62 0.2 295 / 0.35);
+    box-shadow:
+      0 0 0 1px oklch(0.7 0.22 295 / 0.12),
+      0 0 32px oklch(0.55 0.25 295 / 0.18),
+      inset 0 1px 0 oklch(1 0 0 / 0.06);
+    backdrop-filter: blur(12px);
+  }
+
+  .bloom-header {
+    background: oklch(0.14 0.06 290 / 0.5);
+    border-color: oklch(0.62 0.2 295 / 0.3);
+    box-shadow:
+      0 1px 0 oklch(0.75 0.22 295 / 0.15),
+      0 8px 32px oklch(0.5 0.22 295 / 0.12);
+    backdrop-filter: blur(16px);
+  }
+
+  .bloom-glow-text {
+    background: linear-gradient(
+      105deg,
+      oklch(0.85 0.18 295),
+      oklch(0.82 0.22 330),
+      oklch(0.78 0.16 260)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 12px oklch(0.6 0.25 295 / 0.5));
+  }
+
+  .bloom-logo {
+    background: linear-gradient(135deg, oklch(0.72 0.26 295), oklch(0.65 0.28 330), oklch(0.68 0.22 260));
+    box-shadow:
+      0 0 20px oklch(0.6 0.28 295 / 0.55),
+      0 0 40px oklch(0.55 0.24 330 / 0.25),
+      inset 0 1px 0 oklch(1 0 0 / 0.25);
+  }
+}
+
+.markdown-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-body pre {
+  box-shadow: inset 0 0 24px oklch(0.55 0.2 295 / 0.08);
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-x: hidden;
+}
+
+.markdown-body pre code.hljs {
+  background: transparent;
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-body :not(pre) > code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-body a {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>HARalyzer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0e0918;
+        color: #e9d5ff;
+        color-scheme: dark;
+      }
+
+      #root {
+        height: 100%;
+      }
+
+      .app-splash {
+        display: flex;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.25rem;
+        background:
+          radial-gradient(circle at 20% 25%, rgba(168, 85, 247, 0.22) 0%, transparent 42%),
+          radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.16) 0%, transparent 40%),
+          #0e0918;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+
+      .app-splash__logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 4rem;
+        height: 4rem;
+        border-radius: 1rem;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #a855f7, #db2777, #6366f1);
+        box-shadow:
+          0 0 24px rgba(168, 85, 247, 0.55),
+          0 0 48px rgba(219, 39, 119, 0.2);
+        animation: splash-logo-pulse 2.4s ease-in-out infinite;
+      }
+
+      .app-splash__title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        background: linear-gradient(105deg, #e9d5ff, #c084fc, #f472b6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .app-splash__spinner {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        border: 2px solid rgba(168, 85, 247, 0.2);
+        border-top-color: #c084fc;
+        animation: splash-spin 0.85s linear infinite;
+      }
+
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes splash-logo-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          box-shadow:
+            0 0 24px rgba(168, 85, 247, 0.55),
+            0 0 48px rgba(219, 39, 119, 0.2);
+        }
+        50% {
+          transform: scale(1.04);
+          box-shadow:
+            0 0 32px rgba(168, 85, 247, 0.7),
+            0 0 56px rgba(219, 39, 119, 0.35);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root">
+      <div class="app-splash" aria-live="polite" aria-busy="true">
+        <div class="app-splash__logo">H</div>
+        <div class="app-splash__title">HARalyzer</div>
+        <div class="app-splash__spinner" aria-hidden="true"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
