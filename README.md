@@ -9,7 +9,7 @@
 ### ~ War stories time ~
 - v1.1.0 managed to generate a complete Python CLI interface for Yandex Market web API by using a single prompt and 10 minutes of my time. This alone would take me hours. Burning tokens is funny.
 - v1.1.0 ordered snus for itself... Alright, it sounds a bit weird out of context. I mean it is weird. Alright, so, my friend's website, he said it has a decent security. I used his website, exported HAR, and then told HARalyzer "We are red-teaming now, find any security vulnerabilities." When the AI agent was doing something in the background, it ended up finding a business logic flaw in their "order a product" endpoint, it ordered itself snus 15 times and in one of the times it ordered -100 snus with a sum of -1,700 BYN.
-- v1.1.0 crawled through my (game's documentation website)[https://dadaskis.github.io/IndexProjectDocs/assets/guides/General.html] and roasted me for doing `min_distance = 10000000` instead of `min_distance = INF`. When I questioned whether `INF` exists in v3.6 - it searched the Godot docs to validate the existence of this value.
+- v1.1.0 crawled through my [game's documentation website](https://dadaskis.github.io/IndexProjectDocs/assets/guides/General.html) and roasted me for doing `min_distance = 10000000` instead of `min_distance = INF`. When I questioned whether `INF` exists in v3.6 - it searched the Godot docs to validate the existence of this value.
 ### ~~~
 
 <image width="800px" src="public/screenshot.png"/>
