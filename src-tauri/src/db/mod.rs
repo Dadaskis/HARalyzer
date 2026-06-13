@@ -5,7 +5,21 @@ use crate::har::types::{
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use std::path::Path;
+use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
+
+/// Acquire the DB mutex, recovering automatically if a prior holder panicked (poisoned lock).
+pub fn lock_db<'a>(mutex: &'a Mutex<Database>) -> Result<MutexGuard<'a, Database>, String> {
+    match mutex.lock() {
+        Ok(guard) => Ok(guard),
+        Err(poisoned) => {
+            eprintln!(
+                "HARalyzer: recovering poisoned database lock (a background task panicked while using the DB)"
+            );
+            Ok(poisoned.into_inner())
+        }
+    }
+}
 
 pub struct Database {
     conn: Connection,
@@ -86,6 +100,20 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id);
                 CREATE INDEX IF NOT EXISTS idx_chunks_session ON chunks(session_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id);
+
+                CREATE TABLE IF NOT EXISTS tool_steps (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    event_id TEXT NOT NULL DEFAULT '',
+                    step INTEGER NOT NULL,
+                    tool TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '',
+                    reasoning TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_tool_steps_session ON tool_steps(session_id);
                 ",
             )
             .map_err(|e| e.to_string())?;
@@ -104,6 +132,7 @@ impl Database {
             "ALTER TABLE entries ADD COLUMN is_javascript INTEGER DEFAULT 0",
             "ALTER TABLE chunks ADD COLUMN chunk_type TEXT DEFAULT 'traffic'",
             "ALTER TABLE entries ADD COLUMN resource_type TEXT DEFAULT ''",
+            "ALTER TABLE entries ADD COLUMN deobfuscated_js TEXT DEFAULT NULL",
         ];
         for sql in alters {
             let _ = self.conn.execute(sql, []);
@@ -142,6 +171,22 @@ impl Database {
                 "chat_agent_max_steps" => {
                     settings.chat_agent_max_steps = value.parse().unwrap_or(10).clamp(1, 50);
                 }
+                "agent_allow_code_execution" => {
+                    settings.agent_allow_code_execution = value != "false";
+                }
+                "agent_python_venv_path" => settings.agent_python_venv_path = value,
+                "smart_model_routing" => settings.smart_model_routing = value != "false",
+                "tier1_model" => settings.tier1_model = value,
+                "tier2_model" => settings.tier2_model = value,
+                "tier3_model" => settings.tier3_model = value,
+                "provider" => settings.provider = value,
+                "agent_limits" => {
+                    if let Ok(parsed) =
+                        serde_json::from_str::<crate::har::types::AgentLimitsSettings>(&value)
+                    {
+                        settings.agent_limits = parsed;
+                    }
+                }
                 _ => {}
             }
         }
@@ -152,7 +197,7 @@ impl Database {
         let chunk_tokens = settings.chunk_max_tokens.to_string();
         let max_concurrent = settings.max_concurrent_requests.to_string();
         let chat_agent_steps = settings.chat_agent_max_steps.clamp(1, 50).to_string();
-        let pairs: [(&str, &str); 8] = [
+        let pairs: [(&str, &str); 10] = [
             ("openrouter_api_key", settings.openrouter_api_key.as_str()),
             ("default_model", settings.default_model.as_str()),
             ("thinking_model", settings.thinking_model.as_str()),
@@ -175,9 +220,43 @@ impl Database {
                 },
             ),
             ("chat_agent_max_steps", &chat_agent_steps),
+            (
+                "agent_allow_code_execution",
+                if settings.agent_allow_code_execution {
+                    "true"
+                } else {
+                    "false"
+                },
+            ),
+            ("agent_python_venv_path", settings.agent_python_venv_path.as_str()),
         ];
 
         for (key, value) in pairs {
+            self.conn
+                .execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+                    params![key, value],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        let limits_json = serde_json::to_string(&settings.agent_limits.clone().normalized())
+            .map_err(|e| e.to_string())?;
+        let extra: [(&str, String); 6] = [
+            (
+                "smart_model_routing",
+                if settings.smart_model_routing {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                },
+            ),
+            ("tier1_model", settings.tier1_model.clone()),
+            ("tier2_model", settings.tier2_model.clone()),
+            ("tier3_model", settings.tier3_model.clone()),
+            ("provider", settings.provider.clone()),
+            ("agent_limits", limits_json),
+        ];
+        for (key, value) in extra {
             self.conn
                 .execute(
                     "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
@@ -210,7 +289,7 @@ impl Database {
         {
             let mut stmt = tx
                 .prepare(
-                    "INSERT INTO entries (session_id, entry_index, method, url, status, mime_type, size, time_ms, started_at, request_headers, response_headers, request_body, response_body, js_insights, is_javascript, resource_type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                    "INSERT INTO entries (session_id, entry_index, method, url, status, mime_type, size, time_ms, started_at, request_headers, response_headers, request_body, response_body, js_insights, is_javascript, resource_type, deobfuscated_js) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 )
                 .map_err(|e| e.to_string())?;
 
@@ -233,6 +312,7 @@ impl Database {
                     serde_json::to_string(&entry.js_insights).unwrap_or_else(|_| "[]".into()),
                     s.is_javascript as i64,
                     s.resource_type.clone().unwrap_or_default(),
+                    entry.deobfuscated_js,
                 ])
                 .map_err(|e| e.to_string())?;
             }
@@ -246,6 +326,69 @@ impl Database {
             )
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn append_entries(&self, session_id: &str, entries: &[HarEntryDetail]) -> Result<usize, String> {
+        let max_index: i64 = self.conn
+            .query_row(
+                "SELECT COALESCE(MAX(entry_index), -1) FROM entries WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        let offset = (max_index + 1) as usize;
+
+        let tx = self.conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        {
+            let mut stmt = tx
+                .prepare(
+                    "INSERT INTO entries (session_id, entry_index, method, url, status, mime_type, size, time_ms, started_at, request_headers, response_headers, request_body, response_body, js_insights, is_javascript, resource_type, deobfuscated_js) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                )
+                .map_err(|e| e.to_string())?;
+
+            for entry in entries {
+                let s = &entry.summary;
+                let new_index = offset + s.index;
+                stmt.execute(params![
+                    session_id,
+                    new_index as i64,
+                    s.method,
+                    s.url,
+                    s.status as i64,
+                    s.mime_type,
+                    s.size as i64,
+                    s.time_ms,
+                    s.started_at,
+                    serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".into()),
+                    serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".into()),
+                    entry.request_body,
+                    entry.response_body,
+                    serde_json::to_string(&entry.js_insights).unwrap_or_else(|_| "[]".into()),
+                    s.is_javascript as i64,
+                    s.resource_type.clone().unwrap_or_default(),
+                    entry.deobfuscated_js,
+                ])
+                .map_err(|e| e.to_string())?;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+
+        let total: i64 = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM entries WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+
+        self.conn
+            .execute(
+                "UPDATE sessions SET total_entries = ?1, status = 'modified' WHERE id = ?2",
+                params![total, session_id],
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(total as usize)
     }
 
     pub fn insert_chunks(&self, chunks: &[HarChunk]) -> Result<(), String> {
@@ -500,7 +643,7 @@ impl Database {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT entry_index, method, url, status, mime_type, size, time_ms, started_at, is_javascript, resource_type, request_headers, response_headers, request_body, response_body, js_insights FROM entries WHERE session_id = ?1 AND entry_index = ?2",
+                "SELECT entry_index, method, url, status, mime_type, size, time_ms, started_at, is_javascript, resource_type, request_headers, response_headers, request_body, response_body, js_insights, deobfuscated_js FROM entries WHERE session_id = ?1 AND entry_index = ?2",
             )
             .map_err(|e| e.to_string())?;
 
@@ -519,6 +662,7 @@ impl Database {
                 serde_json::from_str(&row.get::<_, String>(14).map_err(|e| e.to_string())?)
                     .unwrap_or_default();
             let resource_type: String = row.get(9).map_err(|e| e.to_string())?;
+            let deobfuscated_js: Option<String> = row.get(15).ok();
 
             Ok(Some(HarEntryDetail {
                 summary: HarEntrySummary {
@@ -542,6 +686,7 @@ impl Database {
                 request_body: row.get(12).map_err(|e| e.to_string())?,
                 response_body: row.get(13).map_err(|e| e.to_string())?,
                 js_insights,
+                deobfuscated_js,
             }))
         } else {
             Ok(None)
@@ -552,7 +697,7 @@ impl Database {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT entry_index, method, url, status, mime_type, size, time_ms, started_at, is_javascript, resource_type, request_headers, response_headers, request_body, response_body, js_insights FROM entries WHERE session_id = ?1 ORDER BY entry_index",
+                "SELECT entry_index, method, url, status, mime_type, size, time_ms, started_at, is_javascript, resource_type, request_headers, response_headers, request_body, response_body, js_insights, deobfuscated_js FROM entries WHERE session_id = ?1 ORDER BY entry_index",
             )
             .map_err(|e| e.to_string())?;
 
@@ -565,6 +710,7 @@ impl Database {
                 let js_insights: Vec<String> =
                     serde_json::from_str(&row.get::<_, String>(14)?).unwrap_or_default();
                 let resource_type: String = row.get(9)?;
+                let deobfuscated_js: Option<String> = row.get(15).ok();
 
                 Ok(HarEntryDetail {
                     summary: HarEntrySummary {
@@ -588,11 +734,27 @@ impl Database {
                     request_body: row.get(12)?,
                     response_body: row.get(13)?,
                     js_insights,
+                    deobfuscated_js,
                 })
             })
             .map_err(|e| e.to_string())?;
 
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn set_deobfuscated_js(
+        &self,
+        session_id: &str,
+        entry_index: usize,
+        code: &str,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE entries SET deobfuscated_js = ?1 WHERE session_id = ?2 AND entry_index = ?3",
+                params![code, session_id, entry_index as i64],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     pub fn get_session_chunks(&self, session_id: &str) -> Result<Vec<HarChunk>, String> {
@@ -722,17 +884,27 @@ impl Database {
             created_at,
         })
     }
-
-    pub fn get_chat_messages(&self, session_id: &str) -> Result<Vec<ChatMessage>, String> {
+    pub fn get_chat_messages(
+        &self,
+        session_id: &str,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<ChatMessage>, String> {
+        let limit = limit.unwrap_or(50);
+        let offset = offset.unwrap_or(0);
+        
+        log::info!("Loading chat messages: session={}, limit={}, offset={}", session_id, limit, offset);
+        
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, session_id, role, content, context_type, context_ref, created_at FROM chat_messages WHERE session_id = ?1 ORDER BY id",
+                "SELECT id, session_id, role, content, context_type, context_ref, created_at
+                 FROM chat_messages WHERE session_id = ?1 ORDER BY id DESC LIMIT ?2 OFFSET ?3",
             )
             .map_err(|e| e.to_string())?;
 
         let rows = stmt
-            .query_map(params![session_id], |row| {
+            .query_map(params![session_id, limit, offset], |row| {
                 Ok(ChatMessage {
                     id: row.get(0)?,
                     session_id: row.get(1)?,
@@ -745,7 +917,13 @@ impl Database {
             })
             .map_err(|e| e.to_string())?;
 
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        let mut messages: Vec<ChatMessage> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        messages.reverse(); // Return in chronological order
+        
+        let total_size: usize = messages.iter().map(|m| m.content.len()).sum();
+        log::info!("Loaded {} messages, total content size: {} bytes", messages.len(), total_size);
+        
+        Ok(messages)
     }
 
     pub fn clear_chat_messages(&self, session_id: &str) -> Result<(), String> {
@@ -755,6 +933,148 @@ impl Database {
                 params![session_id],
             )
             .map_err(|e| e.to_string())?;
+        self.conn
+            .execute(
+                "DELETE FROM tool_steps WHERE session_id = ?1",
+                params![session_id],
+            )
+            .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn insert_tool_step(
+        &self,
+        session_id: &str,
+        event_id: &str,
+        step: usize,
+        tool: &str,
+        status: &str,
+        detail: &str,
+        reasoning: &str,
+    ) -> Result<(), String> {
+        let created_at = Utc::now().to_rfc3339();
+        self.conn
+            .execute(
+                "INSERT INTO tool_steps (session_id, event_id, step, tool, status, detail, reasoning, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![session_id, event_id, step as i64, tool, status, detail, reasoning, created_at],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn get_tool_steps(
+        &self,
+        session_id: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<crate::har::types::ToolStep>, String> {
+        let limit = limit.unwrap_or(100);
+        
+        log::info!("Loading tool steps: session={}, limit={}", session_id, limit);
+        
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT t.id, t.session_id, t.event_id, t.step, t.tool, t.status, t.detail, t.reasoning, t.created_at
+                 FROM tool_steps t
+                 INNER JOIN (
+                     SELECT event_id, MAX(id) as max_id
+                     FROM tool_steps
+                     WHERE session_id = ?1
+                     GROUP BY event_id
+                 ) latest ON t.event_id = latest.event_id AND t.id = latest.max_id
+                 WHERE t.session_id = ?1
+                 ORDER BY t.id DESC LIMIT ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![session_id, limit], |row| {
+                Ok(crate::har::types::ToolStep {
+                    id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    event_id: row.get(2)?,
+                    step: row.get::<_, i64>(3)? as usize,
+                    tool: row.get(4)?,
+                    status: row.get(5)?,
+                    detail: row.get(6)?,
+                    reasoning: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        
+        let mut steps: Vec<crate::har::types::ToolStep> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        steps.reverse();
+        
+        let total_size: usize = steps.iter().map(|s| s.detail.len() + s.reasoning.len()).sum();
+        log::info!("Loaded {} deduplicated tool steps, total content size: {} bytes", steps.len(), total_size);
+        
+        Ok(steps)
+    }
+
+    pub fn replace_session_entries(
+        &self,
+        session_id: &str,
+        entries: &[HarEntryDetail],
+    ) -> Result<(), String> {
+        let tx = self.conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM entries WHERE session_id = ?1",
+            params![session_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        {
+            let mut stmt = tx
+                .prepare(
+                    "INSERT INTO entries (session_id, entry_index, method, url, status, mime_type, size, time_ms, started_at, request_headers, response_headers, request_body, response_body, js_insights, is_javascript, resource_type, deobfuscated_js) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                )
+                .map_err(|e| e.to_string())?;
+
+            for (index, entry) in entries.iter().enumerate() {
+                let s = &entry.summary;
+                stmt.execute(params![
+                    session_id,
+                    index as i64,
+                    s.method,
+                    s.url,
+                    s.status as i64,
+                    s.mime_type,
+                    s.size as i64,
+                    s.time_ms,
+                    s.started_at,
+                    serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".into()),
+                    serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".into()),
+                    entry.request_body,
+                    entry.response_body,
+                    serde_json::to_string(&entry.js_insights).unwrap_or_else(|_| "[]".into()),
+                    s.is_javascript as i64,
+                    s.resource_type.clone().unwrap_or_default(),
+                    entry.deobfuscated_js,
+                ])
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
+        tx.execute(
+            "UPDATE sessions SET total_entries = ?1, status = 'modified' WHERE id = ?2",
+            params![entries.len() as i64, session_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        tx.execute("DELETE FROM chunks WHERE session_id = ?1", params![session_id])
+            .map_err(|e| e.to_string())?;
+
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn delete_entries(&self, session_id: &str, indices: &[usize]) -> Result<(), String> {
+        if indices.is_empty() {
+            return Ok(());
+        }
+        let remove: std::collections::HashSet<usize> = indices.iter().copied().collect();
+        let mut details = self.get_session_entry_details(session_id)?;
+        details.retain(|e| !remove.contains(&e.summary.index));
+        self.replace_session_entries(session_id, &details)
     }
 }

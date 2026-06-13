@@ -4,8 +4,17 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api } from "@/lib/api";
 
 function isHarPath(path: string): boolean {
-  const lower = path.toLowerCase();
+  const lower = path.trim().toLowerCase();
   return lower.endsWith(".har") || lower.endsWith(".json");
+}
+
+async function drainPendingHarFiles(
+  openPath: (filePath: string) => Promise<void>
+): Promise<void> {
+  const paths = await api.takePendingHarFiles();
+  if (paths[0]) {
+    await openPath(paths[0]);
+  }
 }
 
 export function useHarFileOpen(
@@ -23,28 +32,39 @@ export function useHarFileOpen(
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     let unlistenOpen: (() => void) | undefined;
     let unlistenDrop: (() => void) | undefined;
+    let retryTimer: ReturnType<typeof setInterval> | undefined;
 
-    void api.notifyFrontendReady().catch(console.error);
-
-    api
-      .takePendingHarFiles()
-      .then((paths) => {
-        if (paths[0]) {
-          void openPath(paths[0]);
+    const bootstrap = async () => {
+      unlistenOpen = await listen<string[]>("open-har-files", (event) => {
+        const path = event.payload[0];
+        if (path) {
+          void openPath(path);
         }
-      })
-      .catch(console.error);
+      });
 
-    listen<string[]>("open-har-files", (event) => {
-      const path = event.payload[0];
-      if (path) {
-        void openPath(path);
-      }
-    }).then((fn) => {
-      unlistenOpen = fn;
-    });
+      if (cancelled) return;
+
+      await drainPendingHarFiles(openPath);
+      await api.notifyFrontendReady().catch(console.error);
+
+      if (cancelled) return;
+
+      let retries = 0;
+      retryTimer = setInterval(() => {
+        retries += 1;
+        if (retries > 10) {
+          clearInterval(retryTimer);
+          retryTimer = undefined;
+          return;
+        }
+        void drainPendingHarFiles(openPath);
+      }, 500);
+    };
+
+    void bootstrap();
 
     getCurrentWindow()
       .onDragDropEvent((event) => {
@@ -66,8 +86,10 @@ export function useHarFileOpen(
       .catch(console.error);
 
     return () => {
+      cancelled = true;
       unlistenOpen?.();
       unlistenDrop?.();
+      if (retryTimer) clearInterval(retryTimer);
       onDraggingChange?.(false);
     };
   }, [openPath, onDraggingChange]);

@@ -62,8 +62,13 @@ where
 
         let obj_json = read_balanced_object(&mut reader)?;
 
-        let raw: RawHarEntry =
-            serde_json::from_str(&obj_json).map_err(|e| format!("Failed to parse entry: {e}"))?;
+        let raw: RawHarEntry = match serde_json::from_str(&obj_json) {
+            Ok(raw) => raw,
+            Err(e) => {
+                eprintln!("WARN: skipping malformed HAR entry #{index} at byte {pos}: {e}");
+                continue;
+            }
+        };
 
         let detail = entry_from_raw(index, raw);
 
@@ -90,6 +95,61 @@ where
     });
 
     Ok(entries)
+}
+
+/// Re-read a single entry from the on-disk HAR (full bodies, up to 2MB each).
+pub fn fetch_entry_from_har(
+    path: &Path,
+    target_index: usize,
+    filter_static: bool,
+    analyze_js: bool,
+) -> Result<HarEntryDetail, String> {
+    use crate::har::types::{entry_from_raw_full, should_keep_entry, RawHarEntry};
+
+    let file = File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
+    let mut reader = BufReader::with_capacity(READ_BUF_SIZE, file);
+    find_entries_array_start(&mut reader, 0, &mut |_| {})?;
+
+    let mut index = 0usize;
+    loop {
+        skip_whitespace(&mut reader)?;
+        let mut peek = [0u8; 1];
+        match reader.read_exact(&mut peek) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(e) => return Err(format!("Read error: {e}")),
+        }
+        if peek[0] == b']' {
+            break;
+        }
+        if peek[0] == b',' {
+            continue;
+        }
+        if peek[0] != b'{' {
+            return Err(format!("Expected object start, found '{}'", peek[0] as char));
+        }
+        reader
+            .seek(SeekFrom::Current(-1))
+            .map_err(|e| e.to_string())?;
+
+        let obj_json = read_balanced_object(&mut reader)?;
+        let raw: RawHarEntry = match serde_json::from_str(&obj_json) {
+            Ok(raw) => raw,
+            Err(_) => continue,
+        };
+
+        let detail = entry_from_raw_full(index, raw);
+        if should_keep_entry(filter_static, &detail, analyze_js) {
+            if index == target_index {
+                return Ok(detail);
+            }
+            index += 1;
+        }
+    }
+
+    Err(format!("Entry index {target_index} not found in HAR file"))
 }
 
 pub fn stream_parse_har_with_events(

@@ -1,5 +1,6 @@
-const MAX_BODY_STORE: usize = 12_000;
-const MAX_BODY_LLM: usize = 4_000;
+const MAX_BODY_STORE: usize = 120_000;
+const MAX_BODY_FETCH: usize = 5_000_000;
+const MAX_BODY_LLM: usize = 120_000;
 
 pub fn truncate_body(text: &str, max: usize) -> String {
     if text.len() <= max {
@@ -18,7 +19,7 @@ pub fn decode_content_text(text: Option<String>, encoding: Option<String>) -> St
     let Some(raw) = text else {
         return String::new();
     };
-    if encoding.as_deref() == Some("base64") {
+    let decoded = if encoding.as_deref() == Some("base64") {
         use base64::Engine;
         base64::engine::general_purpose::STANDARD
             .decode(raw.as_bytes())
@@ -27,7 +28,31 @@ pub fn decode_content_text(text: Option<String>, encoding: Option<String>) -> St
             .unwrap_or(raw)
     } else {
         raw
+    };
+    fix_utf8_mojibake(&decoded)
+}
+
+/// Fix UTF-8 bytes misinterpreted as Latin-1 (common with Cyrillic in HAR JSON).
+fn fix_utf8_mojibake(text: &str) -> String {
+    let cyrillic_before = text.chars().filter(|c| ('\u{0400}'..='\u{04FF}').contains(c)).count();
+    if cyrillic_before > 2 {
+        return text.to_string();
     }
+    if !text.chars().any(|c| c as u32 >= 0x80) {
+        return text.to_string();
+    }
+    let bytes: Vec<u8> = text.chars().map(|c| c as u8).collect();
+    let fixed = String::from_utf8_lossy(&bytes).into_owned();
+    let cyrillic_after = fixed.chars().filter(|c| ('\u{0400}'..='\u{04FF}').contains(c)).count();
+    if cyrillic_after > cyrillic_before {
+        fixed
+    } else {
+        text.to_string()
+    }
+}
+
+pub fn store_body_fetch(text: &str) -> String {
+    truncate_body(text, MAX_BODY_FETCH)
 }
 
 pub fn analyze_javascript(source: &str) -> Vec<String> {

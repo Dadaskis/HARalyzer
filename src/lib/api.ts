@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AnalysisSession,
+  AgentLimitFieldDoc,
   AppSettings,
   ChatContext,
   ChatMessage,
@@ -10,6 +11,8 @@ import type {
   HarEntrySummary,
   HarParseComplete,
   OpenRouterModel,
+  LoadScriptResult,
+  ToolStep,
 } from "./types";
 import { normalizeEntryDetail } from "./types";
 
@@ -29,8 +32,12 @@ export const api = {
     ),
   getSessionChunks: (sessionId: string) =>
     invoke<HarChunk[]>("get_session_chunks", { sessionId }),
-  getChatMessages: (sessionId: string) =>
-    invoke<ChatMessage[]>("get_chat_messages", { sessionId }),
+  getChatMessages: (sessionId: string, limit?: number, offset?: number) =>
+    invoke<ChatMessage[]>("get_chat_messages", { sessionId, limit, offset }),
+  getToolSteps: (sessionId: string, limit?: number) =>
+    invoke<ToolStep[]>("get_tool_steps", { sessionId, limit }),
+  loadAgentScript: (sessionId: string) =>
+    invoke<LoadScriptResult>("load_agent_script", { sessionId }),
   clearChatMessages: (sessionId: string) =>
     invoke<void>("clear_chat_messages", { sessionId }),
   sendChatMessage: (
@@ -55,8 +62,13 @@ export const api = {
       sessionId,
       thinkingMode: thinkingMode ?? false,
     }),
-  cancelChatAgent: (sessionId: string) =>
-    invoke<void>("cancel_chat_agent", { sessionId }),
+  cancelChatAgent: (sessionId: string, mode?: "abort" | "keep" | "finalize") =>
+    invoke<void>("cancel_chat_agent", { sessionId, mode: mode ?? "abort" }),
+  getEntryBodyFull: (sessionId: string, entryIndex: number) =>
+    invoke<{ request_body: string; response_body: string }>("get_entry_body_full", {
+      sessionId,
+      entryIndex,
+    }),
   openHarFile: () => invoke<string | null>("open_har_file"),
   takePendingHarFiles: () => invoke<string[]>("take_pending_har_files"),
   ackPendingHarFiles: (paths: string[]) =>
@@ -73,5 +85,20 @@ export const api = {
   saveReport: (sessionId: string) =>
     invoke<string | null>("save_report", { sessionId }),
   deleteSession: (sessionId: string) => invoke<void>("delete_session", { sessionId }),
+  deleteSessionEntries: (sessionId: string, entryIndices: number[]) =>
+    invoke<HarEntrySummary[]>("delete_session_entries", { sessionId, entryIndices }),
+  restoreSessionEntries: (sessionId: string, entries: HarEntryDetail[]) =>
+    invoke<HarEntrySummary[]>("restore_session_entries", { sessionId, entries }),
+  getSessionEntriesSnapshot: (sessionId: string) =>
+    invoke<HarEntryDetail[]>("get_session_entries_snapshot", { sessionId }),
+  saveHarFile: (sessionId: string) =>
+    invoke<string | null>("save_har_file", { sessionId }),
   listOpenRouterModels: () => invoke<OpenRouterModel[]>("list_openrouter_models"),
+  getAgentLimitDocs: () => invoke<AgentLimitFieldDoc[]>("get_agent_limit_docs"),
+  deobfuscateJs: (sessionId: string, entryIndex: number, force?: boolean) =>
+    invoke<void>("deobfuscate_js_entry", { sessionId, entryIndex, force: force ?? false }),
+  appendHarFile: (targetSessionId: string) =>
+    invoke<{ appended_count: number; total_entries: number }>("append_har_file", { targetSessionId }),
+  listSessionIds: () =>
+    invoke<[string, string][]>("list_session_ids"),
 };

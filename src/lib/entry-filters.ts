@@ -118,3 +118,32 @@ export function matchesResourceFilter(
   if (filter === "all") return true;
   return classifyEntryResource(entry) === filter;
 }
+
+export interface EntryFilterOptions {
+  searchQuery: string;
+  methodFilter: string;
+  statusFilter: string;
+  resourceFilter: ResourceFilterId;
+}
+
+export function filterEntries(
+  entries: HarEntrySummary[],
+  options: EntryFilterOptions
+): HarEntrySummary[] {
+  const q = options.searchQuery.toLowerCase();
+  return entries.filter((e) => {
+    if (options.methodFilter !== "all" && e.method !== options.methodFilter) return false;
+    if (options.statusFilter === "success" && (e.status < 200 || e.status >= 300)) return false;
+    if (options.statusFilter === "error" && e.status < 400) return false;
+    if (options.statusFilter === "redirect" && (e.status < 300 || e.status >= 400)) return false;
+    if (!matchesResourceFilter(e, options.resourceFilter)) return false;
+    if (
+      q &&
+      !e.url.toLowerCase().includes(q) &&
+      !e.method.toLowerCase().includes(q)
+    ) {
+      return false;
+    }
+    return true;
+  });
+}

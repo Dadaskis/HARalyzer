@@ -72,9 +72,28 @@ export const MarkdownContent = memo(function MarkdownContent({
         </a>
       ),
       table: ({ children }: { children?: React.ReactNode }) => (
-        <div className="my-3 max-w-full overflow-x-auto">
-          <table className="w-full min-w-0 border-collapse text-xs">{children}</table>
+        <div className="my-4 max-w-full overflow-x-auto rounded-md border border-border/60">
+          <table className="w-full min-w-[320px] border-collapse text-xs">{children}</table>
         </div>
+      ),
+      thead: ({ children }: { children?: React.ReactNode }) => (
+        <thead className="bg-muted/40">{children}</thead>
+      ),
+      tbody: ({ children }: { children?: React.ReactNode }) => (
+        <tbody className="divide-y divide-border/40">{children}</tbody>
+      ),
+      tr: ({ children }: { children?: React.ReactNode }) => (
+        <tr className="even:bg-muted/15">{children}</tr>
+      ),
+      th: ({ children }: { children?: React.ReactNode }) => (
+        <th className="border-b border-border/60 px-3 py-2 text-left align-top font-semibold text-foreground/90">
+          {children}
+        </th>
+      ),
+      td: ({ children }: { children?: React.ReactNode }) => (
+        <td className="px-3 py-2 align-top leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">
+          {children}
+        </td>
       ),
       ul: ({ children }: { children?: React.ReactNode }) => (
         <ul className="my-2 list-disc space-y-1 break-words pl-5 [overflow-wrap:anywhere]">

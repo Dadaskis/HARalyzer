@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { highlightCode, normalizeHighlightLanguage } from "@/lib/highlight";
+import { tryFormatJson } from "@/lib/format-json";
 import { cn } from "@/lib/utils";
 
 function extractText(node: ReactNode): string {
@@ -17,11 +19,39 @@ function extractText(node: ReactNode): string {
 interface MarkdownCodeBlockProps {
   children: ReactNode;
   wrap?: boolean;
+  language?: string;
 }
 
-export function MarkdownCodeBlock({ children, wrap = true }: MarkdownCodeBlockProps) {
+function extractLanguage(children: ReactNode): string | undefined {
+  if (!children || typeof children !== "object" || !("props" in children)) return undefined;
+  const code = children as { props?: { className?: string } };
+  const className = code.props?.className ?? "";
+  const match = className.match(/language-([\w-]+)/);
+  return match?.[1];
+}
+
+export function MarkdownCodeBlock({ children, wrap = true, language }: MarkdownCodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const text = useMemo(() => extractText(children).replace(/\n$/, ""), [children]);
+  const rawText = useMemo(() => extractText(children).replace(/\n$/, ""), [children]);
+  const detectedLanguage = language ?? extractLanguage(children);
+
+  const text = useMemo(() => {
+    const lang = normalizeHighlightLanguage(detectedLanguage);
+    if (lang === "json") {
+      const formatted = tryFormatJson(rawText);
+      if (formatted.ok) return formatted.formatted;
+    }
+    if (!detectedLanguage) {
+      const formatted = tryFormatJson(rawText);
+      if (formatted.ok) return formatted.formatted;
+    }
+    return rawText;
+  }, [rawText, detectedLanguage]);
+
+  const highlighted = useMemo(
+    () => highlightCode(text, detectedLanguage),
+    [text, detectedLanguage]
+  );
 
   const handleCopy = async () => {
     try {
@@ -56,10 +86,13 @@ export function MarkdownCodeBlock({ children, wrap = true }: MarkdownCodeBlockPr
           "max-w-full rounded-lg border border-border/60 bg-black/40 p-3 pr-10 pt-9 text-xs",
           wrap
             ? "whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]"
-            : "overflow-x-auto"
+            : "overflow-x-auto whitespace-pre"
         )}
       >
-        {children}
+        <code
+          className={cn("hljs font-mono", wrap && "[overflow-wrap:anywhere] [word-break:break-word]")}
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
       </pre>
     </div>
   );

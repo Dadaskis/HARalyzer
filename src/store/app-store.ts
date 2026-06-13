@@ -2,11 +2,14 @@ import { create } from "zustand";
 import type {
   AnalysisSession,
   AppSettings,
+  HarChunk,
   HarEntryDetail,
   HarEntrySummary,
   HarParseProgress,
   AnalysisProgress,
+  OpenRouterModel,
 } from "@/lib/types";
+import { DEFAULT_AGENT_LIMITS } from "@/lib/types";
 import type { ResourceFilterId } from "@/lib/entry-filters";
 
 interface AppStore {
@@ -20,6 +23,7 @@ interface AppStore {
   analysisProgress: AnalysisProgress | null;
   finalSummary: string | null;
   chunkSummaries: Record<number, string>;
+  sessionChunks: HarChunk[];
   isParsing: boolean;
   isAnalyzing: boolean;
   settingsOpen: boolean;
@@ -38,6 +42,7 @@ interface AppStore {
   setAnalysisProgress: (progress: AnalysisProgress | null) => void;
   setFinalSummary: (summary: string | null) => void;
   addChunkSummary: (index: number, summary: string) => void;
+  setSessionChunks: (chunks: HarChunk[]) => void;
   clearChunkSummaries: () => void;
   setIsParsing: (v: boolean) => void;
   setIsAnalyzing: (v: boolean) => void;
@@ -60,6 +65,7 @@ export const useAppStore = create<AppStore>((set) => ({
   analysisProgress: null,
   finalSummary: null,
   chunkSummaries: {},
+  sessionChunks: [],
   isParsing: false,
   isAnalyzing: false,
   settingsOpen: false,
@@ -79,7 +85,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setFinalSummary: (summary) => set({ finalSummary: summary }),
   addChunkSummary: (index, summary) =>
     set((s) => ({ chunkSummaries: { ...s.chunkSummaries, [index]: summary } })),
-  clearChunkSummaries: () => set({ chunkSummaries: {} }),
+  setSessionChunks: (sessionChunks) => set({ sessionChunks }),
+  clearChunkSummaries: () => set({ chunkSummaries: {}, sessionChunks: [] }),
   setIsParsing: (v) => set({ isParsing: v }),
   setIsAnalyzing: (v) => set({ isAnalyzing: v }),
   setSettingsOpen: (v) => set({ settingsOpen: v }),
@@ -91,6 +98,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       finalSummary: null,
       chunkSummaries: {},
+      sessionChunks: [],
       analysisProgress: null,
       entryChatContext: null,
       chatFocus: false,
@@ -99,9 +107,9 @@ export const useAppStore = create<AppStore>((set) => ({
 
 export interface SettingsStore {
   settings: AppSettings;
-  models: { id: string; name: string }[];
+  models: OpenRouterModel[];
   setSettings: (s: AppSettings) => void;
-  setModels: (m: { id: string; name: string }[]) => void;
+  setModels: (m: OpenRouterModel[]) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -114,6 +122,14 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     max_concurrent_requests: 4,
     analyze_javascript: true,
     chat_agent_max_steps: 10,
+    agent_allow_code_execution: true,
+    agent_python_venv_path: "",
+    smart_model_routing: true,
+    tier1_model: "",
+    tier2_model: "",
+    tier3_model: "",
+    provider: "",
+    agent_limits: { ...DEFAULT_AGENT_LIMITS },
   },
   models: [],
   setSettings: (settings) => set({ settings }),

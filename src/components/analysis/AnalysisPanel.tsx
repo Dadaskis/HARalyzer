@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles, Download, Loader2, RotateCcw } from "lucide-react";
+import { Sparkles, Download, Loader2, RotateCcw, PanelRightClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,12 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/markdown/MarkdownContent";
 import { ChatPanel } from "@/components/analysis/ChatPanel";
 import { ChunkListView } from "@/components/analysis/ChunkListView";
-import type { AnalysisProgress, HarEntryDetail } from "@/lib/types";
+import type { AnalysisProgress, HarChunk, HarEntryDetail } from "@/lib/types";
 
 interface AnalysisPanelProps {
   sessionId: string | null;
   finalSummary: string | null;
   chunkSummaries: Record<number, string>;
+  sessionChunks: HarChunk[];
   analysisProgress: AnalysisProgress | null;
   isAnalyzing: boolean;
   entryContext: HarEntryDetail | null;
@@ -22,6 +23,7 @@ interface AnalysisPanelProps {
   onFinalizeAnalysis: () => void;
   onResetAnalysis: () => void;
   onExport: () => void;
+  onMinimize?: () => void;
   chatFocus?: boolean;
 }
 
@@ -37,6 +39,7 @@ export function AnalysisPanel({
   sessionId,
   finalSummary,
   chunkSummaries,
+  sessionChunks,
   analysisProgress,
   isAnalyzing,
   entryContext,
@@ -45,6 +48,7 @@ export function AnalysisPanel({
   onFinalizeAnalysis,
   onResetAnalysis,
   onExport,
+  onMinimize,
   chatFocus,
 }: AnalysisPanelProps) {
   const synthesisStartRef = useRef<number | null>(null);
@@ -115,10 +119,21 @@ export function AnalysisPanel({
 
   return (
     <div className="flex h-full min-w-0 flex-col border-l border-primary/25 bg-card/40 bloom-panel">
-      <div className="flex items-center gap-2 border-b border-primary/10 px-4 py-3">
-        <Sparkles className="h-4 w-4 text-primary" />
+      <div className="flex flex-wrap items-center gap-2 border-b border-primary/10 px-4 py-3">
+        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         <h2 className="text-sm font-semibold">LLM Analysis</h2>
-        <div className="ml-auto flex gap-2">
+        {onMinimize && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            onClick={onMinimize}
+            title="Minimize panel"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        )}
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           <Button size="sm" onClick={onStartAnalysis} disabled={!sessionId || isAnalyzing}>
             {isAnalyzing ? (
               <>
@@ -220,7 +235,11 @@ export function AnalysisPanel({
 
         <TabsContent value="chunks" className="mt-0 min-w-0 flex-1 overflow-hidden">
           {activeTab === "chunks" ? (
-            <ChunkListView chunkIndices={chunkIndices} chunkSummaries={chunkSummaries} />
+            <ChunkListView
+              chunkIndices={chunkIndices}
+              chunkSummaries={chunkSummaries}
+              sessionChunks={sessionChunks}
+            />
           ) : null}
         </TabsContent>
 

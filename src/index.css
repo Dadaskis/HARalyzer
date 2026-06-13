@@ -194,6 +194,19 @@
     backdrop-filter: blur(16px);
   }
 
+  .bloom-logo {
+    background: linear-gradient(135deg, oklch(0.72 0.26 295), oklch(0.65 0.28 330), oklch(0.68 0.22 260));
+    box-shadow:
+      0 0 20px oklch(0.6 0.28 295 / 0.55),
+      0 0 40px oklch(0.55 0.24 330 / 0.25),
+      inset 0 1px 0 oklch(1 0 0 / 0.25);
+    animation: bloom-pulse 4s ease-in-out infinite;
+  }
+
+  .bloom-brand {
+    animation: bloom-brand-in 1.2s ease-out both;
+  }
+
   .bloom-glow-text {
     background: linear-gradient(
       105deg,
@@ -205,14 +218,54 @@
     background-clip: text;
     color: transparent;
     filter: drop-shadow(0 0 12px oklch(0.6 0.25 295 / 0.5));
+    animation: bloom-text-glow 4s ease-in-out infinite;
   }
+}
 
-  .bloom-logo {
-    background: linear-gradient(135deg, oklch(0.72 0.26 295), oklch(0.65 0.28 330), oklch(0.68 0.22 260));
+@keyframes bloom-pulse {
+  0%,
+  100% {
     box-shadow:
-      0 0 20px oklch(0.6 0.28 295 / 0.55),
-      0 0 40px oklch(0.55 0.24 330 / 0.25),
+      0 0 16px oklch(0.6 0.28 295 / 0.45),
+      0 0 32px oklch(0.55 0.24 330 / 0.2),
       inset 0 1px 0 oklch(1 0 0 / 0.25);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 28px oklch(0.65 0.32 295 / 0.75),
+      0 0 56px oklch(0.58 0.28 330 / 0.4),
+      inset 0 1px 0 oklch(1 0 0 / 0.35);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes bloom-text-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 10px oklch(0.6 0.25 295 / 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 18px oklch(0.68 0.3 330 / 0.75));
+  }
+}
+
+@keyframes bloom-brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@layer components {
+  .bloom-glow-text-placeholder {
+    display: none;
   }
 }
 
@@ -257,4 +310,43 @@
 .markdown-body img {
   max-width: 100%;
   height: auto;
+}
+
+/* Code blocks: vertical scroll in viewport, horizontal scroll pinned at bottom */
+.code-scroll-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.55 0.2 295 / 0.45) transparent;
+}
+
+.code-scroll-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+
+.code-scroll-viewport::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: oklch(0.55 0.2 295 / 0.45);
+}
+
+.code-scroll-htrack {
+  height: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.55 0.2 295 / 0.55) oklch(0.13 0.05 292);
+}
+
+.code-scroll-htrack::-webkit-scrollbar {
+  height: 10px;
+}
+
+.code-scroll-htrack::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    oklch(0.6 0.22 295 / 0.7),
+    oklch(0.62 0.18 320 / 0.65)
+  );
+}
+
+.code-scroll-htrack::-webkit-scrollbar-track {
+  background: oklch(0.13 0.05 292);
 }

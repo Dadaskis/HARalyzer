@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { FileUp, Settings, Loader2, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelHandle,
+} from "react-resizable-panels";
+import { ChevronLeft, FileUp, Settings, Loader2, Search, Sparkles, X, FilePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -13,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { SessionSidebar } from "@/components/sidebar/SessionSidebar";
 import { EntryTable } from "@/components/entries/EntryTable";
+import { EntryEditToolbar } from "@/components/entries/EntryEditToolbar";
 import { ResourceFilterBar } from "@/components/entries/ResourceFilterBar";
 import { EntryDetailLayout } from "@/components/entries/EntryDetailPanel";
 import { AnalysisPanel } from "@/components/analysis/AnalysisPanel";
@@ -20,10 +26,21 @@ import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { useAppStore, useSettingsStore } from "@/store/app-store";
 import { useTauriEvents } from "@/hooks/use-tauri-events";
 import { useHarFileOpen } from "@/hooks/use-har-file-open";
+import { useHarEdit } from "@/hooks/use-har-edit";
 import { api } from "@/lib/api";
-import { formatBytes, normalizeMarkdownReport } from "@/lib/utils";
+import { filterEntries } from "@/lib/entry-filters";
+import { formatBytes, normalizeMarkdownReport, cn } from "@/lib/utils";
 function App() {
   useTauriEvents();
+
+  const analysisPanelRef = useRef<ImperativePanelHandle>(null);
+  const [analysisCollapsed, setAnalysisCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("haralyzer-analysis-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const {
     sessions,
@@ -36,6 +53,7 @@ function App() {
     analysisProgress,
     finalSummary,
     chunkSummaries,
+    sessionChunks,
     isParsing,
     isAnalyzing,
     settingsOpen,
@@ -57,11 +75,17 @@ function App() {
     setMethodFilter,
     setStatusFilter,
     setResourceFilter,
+    setSessionChunks,
     resetAnalysis,
   } = useAppStore();
 
+  const harEdit = useHarEdit(activeSessionId);
+  const lastEditClickRef = useRef<number | null>(null);
+  const [editMode, setEditMode] = useState(false);
+
   const { setSettings } = useSettingsStore();
   const parsingRef = useRef(false);
+  const pendingOpenRef = useRef<string[]>([]);
   const [isDraggingHar, setIsDraggingHar] = useState(false);
 
   const loadSessions = useCallback(async () => {
@@ -80,6 +104,7 @@ function App() {
         api.getSessionChunks(sessionId),
       ]);
       setEntries(sessionEntries);
+      setSessionChunks(chunks);
       if (session?.final_summary) {
         setFinalSummary(normalizeMarkdownReport(session.final_summary));
       }
@@ -89,8 +114,147 @@ function App() {
         }
       });
     },
-    [setActiveSessionId, setEntries, setFinalSummary, setSelectedEntry, resetAnalysis]
+    [setActiveSessionId, setEntries, setFinalSummary, setSelectedEntry, resetAnalysis, setSessionChunks]
   );
+
+  const applyEntryUpdate = useCallback(
+    async (updated: Awaited<ReturnType<typeof harEdit.deleteSelected>>) => {
+      if (!updated) return;
+      setEntries(updated);
+      setSelectedEntry(null);
+      if (activeSessionId) {
+        await loadSessions();
+      }
+    },
+    [activeSessionId, setEntries, setSelectedEntry, loadSessions]
+  );
+
+  const visibleEntries = useMemo(
+    () =>
+      filterEntries(entries, {
+        searchQuery,
+        methodFilter,
+        statusFilter,
+        resourceFilter,
+      }),
+    [entries, searchQuery, methodFilter, statusFilter, resourceFilter]
+  );
+
+  const allVisibleSelected =
+    visibleEntries.length > 0 &&
+    visibleEntries.every((e) => harEdit.selectedIndices.has(e.index));
+
+  useEffect(() => {
+    harEdit.resetEditState();
+    lastEditClickRef.current = null;
+    setEditMode(false);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!editMode) {
+      harEdit.resetEditState();
+      lastEditClickRef.current = null;
+    }
+  }, [editMode]);
+
+  useEffect(() => {
+    if (!editMode) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        void harEdit.deleteSelected().then(applyEntryUpdate);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        void harEdit.undo().then(applyEntryUpdate);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        void harEdit.redo().then(applyEntryUpdate);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editMode, harEdit, applyEntryUpdate]);
+
+  const handleEditRowClick = useCallback(
+    (index: number, shiftKey: boolean) => {
+      if (shiftKey && lastEditClickRef.current !== null) {
+        const startIdx = visibleEntries.findIndex((e) => e.index === lastEditClickRef.current);
+        const endIdx = visibleEntries.findIndex((e) => e.index === index);
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          harEdit.selectRange(visibleEntries.slice(lo, hi + 1).map((e) => e.index));
+        }
+      } else {
+        harEdit.toggleSelection(index);
+      }
+      lastEditClickRef.current = index;
+    },
+    [visibleEntries, harEdit]
+  );
+
+  const handleToggleSelectAllVisible = useCallback(() => {
+    harEdit.setAllSelected(
+      visibleEntries.map((e) => e.index),
+      !allVisibleSelected
+    );
+  }, [visibleEntries, allVisibleSelected, harEdit]);
+
+  const handleDeleteUnselected = useCallback(async () => {
+    const count = entries.length - harEdit.selectedIndices.size;
+    if (count <= 0) return;
+    if (
+      !window.confirm(
+        `Delete ${count.toLocaleString()} unselected ${count === 1 ? "entry" : "entries"}? This cannot be undone except via Undo.`
+      )
+    ) {
+      return;
+    }
+    await applyEntryUpdate(await harEdit.deleteUnselected(entries));
+  }, [entries, harEdit, applyEntryUpdate]);
+
+  const handleExpandAnalysis = useCallback(() => {
+    analysisPanelRef.current?.expand();
+  }, []);
+
+  const handleMinimizeAnalysis = useCallback(() => {
+    analysisPanelRef.current?.collapse();
+  }, []);
+
+  const handleSaveHar = useCallback(async () => {
+    if (!activeSessionId) return;
+    try {
+      const path = await api.saveHarFile(activeSessionId);
+      if (path) alert(`HAR saved to:\n${path}`);
+    } catch (err) {
+      console.error(err);
+      alert(String(err));
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (chatFocus && analysisCollapsed) {
+      analysisPanelRef.current?.expand();
+    }
+  }, [chatFocus, analysisCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("haralyzer-analysis-collapsed", String(analysisCollapsed));
+    } catch {}
+  }, [analysisCollapsed]);
 
   useEffect(() => {
     loadSessions();
@@ -99,7 +263,12 @@ function App() {
 
   const parseHarFromPath = useCallback(
     async (filePath: string) => {
-      if (parsingRef.current) return;
+      if (parsingRef.current) {
+        if (!pendingOpenRef.current.includes(filePath)) {
+          pendingOpenRef.current.push(filePath);
+        }
+        return;
+      }
       parsingRef.current = true;
       setIsParsing(true);
       resetAnalysis();
@@ -114,6 +283,10 @@ function App() {
       } finally {
         parsingRef.current = false;
         setIsParsing(false);
+        const next = pendingOpenRef.current.shift();
+        if (next) {
+          void parseHarFromPath(next);
+        }
       }
     },
     [loadSessions, loadSession, resetAnalysis, setIsParsing, setSelectedEntry]
@@ -125,6 +298,19 @@ function App() {
     const filePath = await api.openHarFile();
     if (!filePath) return;
     await parseHarFromPath(filePath);
+  };
+
+  const handleAppendHar = async () => {
+    if (!activeSessionId) return;
+    try {
+      const result = await api.appendHarFile(activeSessionId);
+      alert(`Appended ${result.appended_count} entries. Total: ${result.total_entries}`);
+      await loadSession(activeSessionId);
+      await loadSessions();
+    } catch (err) {
+      console.error(err);
+      alert(String(err));
+    }
   };
 
   const handleSelectEntry = async (index: number) => {
@@ -140,6 +326,16 @@ function App() {
   const handleAskAiAboutEntry = (entry: NonNullable<typeof selectedEntry>) => {
     setEntryChatContext(entry);
     setChatFocus(true);
+  };
+
+  const handleDeobfuscatedJs = async (entryIndex: number) => {
+    if (!activeSessionId) return;
+    try {
+      const detail = await api.getEntryDetail(activeSessionId, entryIndex);
+      setSelectedEntry(detail);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleStartAnalysis = async () => {
@@ -230,7 +426,8 @@ function App() {
           </p>
         </div>
       )}
-      <header className="bloom-header relative z-10 flex items-center gap-3 border-b px-4 py-2">        <div className="flex items-center gap-2">
+      <header className="bloom-header relative z-10 flex flex-wrap items-center gap-3 border-b px-4 py-2">
+        <div className="flex items-center gap-2 bloom-brand">
           <div className="bloom-logo flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white">
             H
           </div>
@@ -252,6 +449,13 @@ function App() {
             </>
           )}
         </Button>
+
+        {activeSession && (
+          <Button size="sm" variant="outline" onClick={handleAppendHar} disabled={isParsing}>
+            <FilePlus />
+            Append HAR
+          </Button>
+        )}
 
         {activeSession && (
           <div className="text-xs text-muted-foreground">
@@ -298,18 +502,28 @@ function App() {
 
         <Panel defaultSize={52} minSize={30}>
           <div className="relative flex h-full flex-col">
-            <div className="flex items-center gap-2 border-b border-primary/10 px-4 py-2">
-              <div className="relative flex-1">
+            <div className="flex flex-wrap items-center gap-2 border-b border-primary/10 px-4 py-2">
+              <div className="relative min-w-[140px] flex-1 basis-[200px]">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search URLs..."
-                  className="h-8 border-primary/15 bg-background/50 pl-8 text-xs"
+                  className="h-8 border-primary/15 bg-background/50 pl-8 pr-8 text-xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Clear search"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
               <Select value={methodFilter} onValueChange={setMethodFilter}>
-                <SelectTrigger className="h-8 w-28 text-xs">
+                <SelectTrigger className="h-8 w-28 shrink-0 text-xs">
                   <SelectValue placeholder="Method" />
                 </SelectTrigger>
                 <SelectContent>
@@ -322,7 +536,7 @@ function App() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 w-28 text-xs">
+                <SelectTrigger className="h-8 w-28 shrink-0 text-xs">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -332,13 +546,42 @@ function App() {
                   <SelectItem value="error">4xx/5xx</SelectItem>
                 </SelectContent>
               </Select>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={editMode}
+                  onChange={(e) => setEditMode(e.target.checked)}
+                  className="rounded border-input"
+                />
+                Edit mode
+              </label>
             </div>
-            <ResourceFilterBar value={resourceFilter} onChange={setResourceFilter} />
+            <ResourceFilterBar
+              value={resourceFilter}
+              onChange={setResourceFilter}
+              editMode={editMode}
+              allVisibleSelected={allVisibleSelected}
+              onToggleSelectAllVisible={handleToggleSelectAllVisible}
+            />
+            {editMode && (
+              <EntryEditToolbar
+                selectedCount={harEdit.selectedIndices.size}
+                canUndo={harEdit.canUndo}
+                canRedo={harEdit.canRedo}
+                onUndo={() => void harEdit.undo().then(applyEntryUpdate)}
+                onRedo={() => void harEdit.redo().then(applyEntryUpdate)}
+                onDeleteSelected={() => void harEdit.deleteSelected().then(applyEntryUpdate)}
+                onDeleteUnselected={handleDeleteUnselected}
+                onSaveHar={handleSaveHar}
+              />
+            )}
             <div className="min-h-0 flex-1 overflow-hidden">
               <EntryDetailLayout
-                entry={selectedEntry}
+                sessionId={activeSessionId ?? ""}
+                entry={editMode ? null : selectedEntry}
                 onClose={() => setSelectedEntry(null)}
                 onAskAi={handleAskAiAboutEntry}
+                onDeobfuscated={handleDeobfuscatedJs}
               >
                 <EntryTable
                   entries={entries}
@@ -346,21 +589,37 @@ function App() {
                   methodFilter={methodFilter}
                   statusFilter={statusFilter}
                   resourceFilter={resourceFilter}
-                  selectedIndex={selectedEntry?.summary.index ?? null}
+                  selectedIndex={editMode ? null : selectedEntry?.summary.index ?? null}
                   onSelectEntry={handleSelectEntry}
-                />              </EntryDetailLayout>
+                  editMode={editMode}
+                  selectedIndices={harEdit.selectedIndices}
+                  onEditRowClick={handleEditRowClick}
+                />
+              </EntryDetailLayout>
             </div>
           </div>
         </Panel>
 
-        <PanelResizeHandle className="w-1 bg-primary/20 transition-colors hover:bg-primary/50" />
+        {!analysisCollapsed && (
+          <PanelResizeHandle className="w-1 bg-primary/20 transition-colors hover:bg-primary/50" />
+        )}
 
-        <Panel defaultSize={30} minSize={20} maxSize={45}>
+        <Panel
+          ref={analysisPanelRef}
+          collapsible
+          collapsedSize={0}
+          minSize={analysisCollapsed ? 0 : 20}
+          defaultSize={30}
+          maxSize={45}
+          onCollapse={() => setAnalysisCollapsed(true)}
+          onExpand={() => setAnalysisCollapsed(false)}
+        >
           <AnalysisPanel
             key={`${activeSessionId ?? "none"}-${chatFocus}`}
             sessionId={activeSessionId}
             finalSummary={finalSummary}
             chunkSummaries={chunkSummaries}
+            sessionChunks={sessionChunks}
             analysisProgress={analysisProgress}
             isAnalyzing={isAnalyzing}
             entryContext={entryChatContext}
@@ -372,9 +631,29 @@ function App() {
             onFinalizeAnalysis={handleFinalizeAnalysis}
             onResetAnalysis={handleResetAnalysis}
             onExport={handleExport}
+            onMinimize={handleMinimizeAnalysis}
             chatFocus={chatFocus}
           />
         </Panel>
+
+        {analysisCollapsed && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className={cn(
+              "absolute right-0 top-1/2 z-20 h-auto -translate-y-1/2 rounded-l-md rounded-r-none",
+              "border border-r-0 border-primary/25 bg-card/95 px-2 py-3 shadow-lg backdrop-blur-sm",
+              "flex flex-col items-center gap-1.5 text-[10px] font-medium text-primary"
+            )}
+            onClick={handleExpandAnalysis}
+            title="Show LLM Analysis"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <Sparkles className="h-4 w-4" />
+            <span className="[writing-mode:vertical-rl] rotate-180">LLM</span>
+          </Button>
+        )}
       </PanelGroup>
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
