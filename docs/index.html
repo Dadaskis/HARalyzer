@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="HARalyzer - A kickass HAR viewer with agentic AI that can analyze HTTP archives, generate reports, and even order snus for you." />
+  <title>HARalyzer</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: #0e0918;
+      color: #d4c4e8;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: #c084fc; text-decoration: none; transition: color .2s; }
+    a:hover { color: #e9d5ff; }
+
+    .container { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    nav .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: #e9d5ff;
+    }
+    nav .logo img { width: 28px; height: 28px; border-radius: 6px; }
+    nav a.gh-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .875rem;
+      color: #a78bbf;
+      border: 1px solid #2d1b4e;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all .2s;
+    }
+    nav a.gh-link:hover {
+      border-color: #7c3aed;
+      color: #e9d5ff;
+      background: rgba(124, 58, 237, .08);
+    }
+
+    .hero {
+      text-align: center;
+      padding: 80px 24px 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      left: 50%;
+      translate: -50% 0;
+      width: 700px;
+      height: 700px;
+      background: radial-gradient(circle, rgba(168,85,247,.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      font-size: 2rem;
+      font-weight: 800;
+      color: #fff;
+      background: linear-gradient(135deg, #a855f7, #db2777, #6366f1);
+      box-shadow: 0 0 32px rgba(168,85,247,.5), 0 0 64px rgba(219,39,119,.2);
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5.5vw, 3.6rem);
+      font-weight: 800;
+      letter-spacing: -.03em;
+      background: linear-gradient(105deg, #e9d5ff, #c084fc, #f472b6);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 16px;
+    }
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: #a78bbf;
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+    .hero .subtitle strong { color: #e9d5ff; font-weight: 600; }
+    .hero .cta-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: .95rem;
+      transition: all .2s;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #7c3aed, #a855f7);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(168,85,247,.3);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 32px rgba(168,85,247,.5);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: rgba(168,85,247,.08);
+      color: #c084fc;
+      border: 1px solid rgba(168,85,247,.2);
+    }
+    .btn-secondary:hover {
+      background: rgba(168,85,247,.15);
+      border-color: #7c3aed;
+    }
+
+    .section { padding: 72px 0; }
+    .section-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #e9d5ff;
+      letter-spacing: -.02em;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .section-desc {
+      text-align: center;
+      color: #a78bbf;
+      max-width: 560px;
+      margin: 0 auto 48px;
+      font-size: .95rem;
+    }
+
+    .war-stories {
+      background:
+        radial-gradient(ellipse at 30% 50%, rgba(168,85,247,.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 50%, rgba(236,72,153,.05) 0%, transparent 50%);
+    }
+    .story-card {
+      background: rgba(255,255,255,.025);
+      border: 1px solid rgba(168,85,247,.1);
+      border-radius: 14px;
+      padding: 28px;
+      margin-bottom: 16px;
+      transition: border-color .2s;
+    }
+    .story-card:hover { border-color: rgba(168,85,247,.25); }
+    .story-card .badge {
+      display: inline-block;
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #f472b6;
+      margin-bottom: 8px;
+    }
+    .story-card h3 {
+      font-size: 1.1rem;
+      color: #e9d5ff;
+      margin-bottom: 8px;
+    }
+    .story-card p { color: #b4a0cc; font-size: .925rem; }
+
+    .can-section {
+      text-align: center;
+      padding: 24px 24px 40px;
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .can-prefix {
+      font-weight: 700;
+      background: linear-gradient(105deg, #e9d5ff, #c084fc, #f472b6);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .can-rotator {
+      color: #d4c4e8;
+      position: relative;
+      display: inline-block;
+      min-width: 200px;
+      text-align: left;
+    }
+    .can-rotator .word {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: canFadeIn .5s ease forwards;
+    }
+    .can-rotator .word.out {
+      animation: canFadeOut .35s ease forwards;
+    }
+    @keyframes canFadeIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes canFadeOut {
+      to { opacity: 0; transform: translateY(-6px); }
+    }
+
+    .screenshot-section {
+      text-align: center;
+      padding: 24px 0 60px;
+    }
+    .screenshot-section img {
+      max-width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(168,85,247,.12);
+      box-shadow: 0 0 60px rgba(168,85,247,.08);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: rgba(255,255,255,.02);
+      border: 1px solid rgba(168,85,247,.08);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color .2s;
+    }
+    .feature-card:hover { border-color: rgba(168,85,247,.2); }
+    .feature-card .icon {
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+    }
+    .feature-card h4 {
+      color: #e9d5ff;
+      font-size: .95rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .feature-card p {
+      color: #a78bbf;
+      font-size: .85rem;
+      line-height: 1.55;
+    }
+
+    .download-os-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .download-os-card {
+      background: rgba(255,255,255,.025);
+      border: 1px solid rgba(168,85,247,.1);
+      border-radius: 14px;
+      padding: 28px 24px;
+      transition: border-color .2s;
+    }
+    .download-os-card:hover { border-color: rgba(168,85,247,.25); }
+    .download-os-card .os-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .download-os-card .os-header .os-icon {
+      font-size: 1.6rem;
+    }
+    .download-os-card .os-header h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #e9d5ff;
+    }
+    .download-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(168,85,247,.06);
+    }
+    .download-row:last-child { border-bottom: none; }
+    .download-row .format {
+      color: #b4a0cc;
+      font-size: .875rem;
+    }
+    .download-row .format strong { color: #c084fc; font-weight: 600; }
+    .download-row .dl-btn {
+      font-size: .8rem;
+      font-weight: 600;
+      color: #c084fc;
+      padding: 5px 16px;
+      border-radius: 6px;
+      background: rgba(168,85,247,.1);
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+    .download-row .dl-btn:hover {
+      background: rgba(168,85,247,.2);
+      color: #e9d5ff;
+    }
+
+    .tech-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .tech-tag {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 500;
+      background: rgba(168,85,247,.07);
+      color: #c084fc;
+      border: 1px solid rgba(168,85,247,.1);
+    }
+
+    footer {
+      border-top: 1px solid rgba(168,85,247,.08);
+      padding: 32px 24px;
+      text-align: center;
+      color: #6b5b82;
+      font-size: .85rem;
+    }
+    footer a { color: #a78bbf; }
+
+    .konami-msg {
+      position: fixed;
+      bottom: -80px;
+      left: 50%;
+      translate: -50% 0;
+      background: linear-gradient(135deg, #a855f7, #db2777);
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: .95rem;
+      box-shadow: 0 0 40px rgba(168,85,247,.5);
+      z-index: 999;
+      transition: bottom .6s cubic-bezier(.34,1.56,.64,1);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .konami-msg.show { bottom: 32px; }
+    .konami .logo-badge {
+      animation: konamiGlow .8s ease-in-out infinite alternate;
+    }
+    @keyframes konamiGlow {
+      0%   { box-shadow: 0 0 32px #a855f7, 0 0 64px #db2777; }
+      25%  { box-shadow: 0 0 32px #f59e0b, 0 0 64px #ef4444; }
+      50%  { box-shadow: 0 0 32px #22d3ee, 0 0 64px #6366f1; }
+      75%  { box-shadow: 0 0 32px #34d399, 0 0 64px #a855f7; }
+      100% { box-shadow: 0 0 32px #f472b6, 0 0 64px #f59e0b; }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding: 56px 20px 40px; }
+      .section { padding: 48px 0; }
+      .features-grid { grid-template-columns: 1fr; }
+      .download-os-group { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">
+      <img src="icon.svg" alt="" />
+      HARalyzer
+    </div>
+    <a class="gh-link" href="https://github.com/dadaskis/HARalyzer" target="_blank">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </nav>
+
+  <section class="hero">
+    <div class="logo-badge">H</div>
+    <h1>HARalyzer</h1>
+    <p class="subtitle">
+      A kickass HAR viewer with agentic AI.<br />
+      Analyze HTTP archives, generate reports, and watch an LLM
+      <strong>order itself snus</strong> while red-teaming your endpoints.
+    </p>
+    <div class="cta-buttons">
+      <a class="btn btn-primary" href="#download">Download</a>
+      <a class="btn btn-secondary" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">View Releases</a>
+    </div>
+  </section>
+
+  <div class="can-section">
+    <span class="can-prefix">HARalyzer can</span>
+    <span class="can-rotator" id="canRotator">help you debug your web-application.</span>
+  </div>
+
+  <div class="screenshot-section container">
+    <img src="screenshot.png" alt="HARalyzer screenshot" />
+  </div>
+
+  <section class="section war-stories">
+    <div class="container">
+      <h2 class="section-title">War Stories</h2>
+      <p class="section-desc">Things this software has done that I cannot explain to my mother.</p>
+
+      <div class="story-card">
+        <div class="badge">v1.1.0 &bull; The Snus Incident</div>
+        <h3>Ordered -100 snus with a negative total</h3>
+        <p>
+          Told HARalyzer &ldquo;We are red-teaming now, find any security vulnerabilities.&rdquo;
+          While the AI agent was crawling around in the background, it discovered a business logic
+          flaw in a &ldquo;order a product&rdquo; endpoint. It ordered itself snus 15 times.
+          One of those times it ordered <em>-100 snus</em> with a sum of <strong>-1,700 BYN</strong>.
+          I didn't even know negative quantities were possible.
+        </p>
+      </div>
+
+      <div class="story-card">
+        <div class="badge">v1.1.0 &bull; Full-Stack Dev</div>
+        <h3>Generated a Python CLI in 10 minutes</h3>
+        <p>
+          One prompt, 10 minutes of token-burning, and HARalyzer produced a complete Python CLI
+          interface for the Yandex Market web API. This would've taken me hours manually.
+          Truly revolutionary. Burning tokens is funny.
+        </p>
+      </div>
+
+      <div class="story-card">
+        <div class="badge">v1.1.0 &bull; Roast Master</div>
+        <h3>Crawled my game docs and roasted my code</h3>
+        <p>
+          It navigated to my game's documentation website, found <code>min_distance = 10000000</code>,
+          and roasted me for not using <code>INF</code>. When I asked if <code>INF</code> even exists
+          in Godot 3.6 — it searched the engine docs <em>to validate itself</em>. It was right. I'm
+          still recovering.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="container">
+      <h2 class="section-title">Features</h2>
+      <p class="section-desc">The boring but useful part.</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>Stream-Parse Huge HAR Files</h4>
+          <p>Entries read from disk incrementally — never loaded entirely into memory. 100k+ requests? Fine.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>Virtualized Entry Table</h4>
+          <p>Browse, search, and filter thousands of requests by method, status code, URL, or resource type.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>Chunked LLM Analysis</h4>
+          <p>Map-reduce pipeline with parallel chunk processing. Re-run without losing completed chunks.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>AI Chat &mdash; Agent Mode</h4>
+          <p>Tool-backed assistant that queries real HAR data instead of guessing. List entries, trace cookies, generate cURL commands, even replay HTTP requests.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>JavaScript Analysis</h4>
+          <p>Detects fetch / XHR / axios / WebSocket patterns and sends JS sources to the LLM for deeper insight.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>HAR Editing</h4>
+          <p>Edit mode with undo/redo, delete entries, invert selection, and export a cleaned-up HAR file.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>Session History</h4>
+          <p>SQLite stores past analyses for resume and review. Markdown export for shareable reports.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">&#9881;</div>
+          <h4>Multi-Step Agent Loop</h4>
+          <p>Configurable step limit with per-step reasoning display. Continue or stop when the limit is hit.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="download" style="background: rgba(168,85,247,.015);">
+    <div class="container">
+      <h2 class="section-title">Download</h2>
+      <p class="section-desc">
+        No Node.js, no Rust, no developer tools needed to run it.<br/>
+        Just download and go.
+      </p>
+
+      <div class="download-os-group">
+        <div class="download-os-card">
+          <div class="os-header">
+            <span class="os-icon">&#128451;</span>
+            <h4>Linux</h4>
+          </div>
+          <div class="download-row">
+            <span class="format"><strong>AppImage</strong> &mdash; any distro</span>
+            <a class="dl-btn" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">Download</a>
+          </div>
+          <div class="download-row">
+            <span class="format"><strong>.deb</strong> &mdash; Debian / Ubuntu</span>
+            <a class="dl-btn" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">Download</a>
+          </div>
+          <div class="download-row">
+            <span class="format"><strong>.rpm</strong> &mdash; Fedora / RHEL</span>
+            <a class="dl-btn" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">Download</a>
+          </div>
+        </div>
+        <div class="download-os-card">
+          <div class="os-header">
+            <span class="os-icon">&#9783;</span>
+            <h4>Windows</h4>
+          </div>
+          <div class="download-row">
+            <span class="format"><strong>NSIS Installer</strong> &mdash; setup.exe</span>
+            <a class="dl-btn" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">Download</a>
+          </div>
+          <div class="download-row">
+            <span class="format"><strong>MSI Installer</strong> &mdash; .msi package</span>
+            <a class="dl-btn" href="https://github.com/dadaskis/HARalyzer/releases" target="_blank">Download</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container" style="text-align:center;">
+      <h2 class="section-title">Tech Stack</h2>
+      <p class="section-desc">What went into this beautiful disaster.</p>
+      <div class="tech-list">
+        <span class="tech-tag">React 19</span>
+        <span class="tech-tag">TypeScript</span>
+        <span class="tech-tag">Vite</span>
+        <span class="tech-tag">Tailwind CSS 4</span>
+        <span class="tech-tag">shadcn/ui</span>
+        <span class="tech-tag">Tauri 2</span>
+        <span class="tech-tag">Rust</span>
+        <span class="tech-tag">SQLite</span>
+        <span class="tech-tag">OpenRouter</span>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const phrases = [
+      "help you debug your web-application.",
+      "work with undocumented APIs.",
+      "automate interactions from automated traffic.",
+      "look for security vulnerabilities.",
+      "explain you everything.",
+      "help you test whatever has those HARs.",
+      "satisfy your wife if she\u2019d had a public endpoint.",
+    ];
+    let idx = 0;
+    const el = document.getElementById("canRotator");
+
+    function cycle() {
+      el.style.opacity = "0";
+      el.style.transform = "translateY(6px)";
+      el.style.transition = "opacity .35s ease, transform .35s ease";
+      setTimeout(() => {
+        idx = (idx + 1) % phrases.length;
+        el.textContent = phrases[idx];
+        el.style.opacity = "1";
+        el.style.transform = "translateY(0)";
+      }, 380);
+    }
+
+    el.textContent = phrases[0];
+    el.style.opacity = "1";
+    el.style.transform = "translateY(0)";
+    el.style.transition = "opacity .35s ease, transform .35s ease";
+    setInterval(cycle, 3500);
+
+    const konami = [38,38,40,40,37,39,37,39,66,65];
+    let pos = 0;
+    document.addEventListener("keydown", e => {
+      pos = e.keyCode === konami[pos] ? pos + 1 : e.keyCode === konami[0] ? 1 : 0;
+      if (pos === konami.length) {
+        pos = 0;
+        document.body.classList.add("konami");
+        document.getElementById("konamiMsg").classList.add("show");
+        setTimeout(() => document.getElementById("konamiMsg").classList.remove("show"), 4000);
+      }
+    });
+  </script>
+
+  <div class="konami-msg" id="konamiMsg">&#8987; CHEAT ACTIVATED &mdash; +30 aura</div>
+
+  <footer>
+    <p>
+      <a href="https://github.com/dadaskis/HARalyzer">HARalyzer</a>
+      &middot; MIT License
+      &middot; Made by <a href="https://github.com/dadaskis">dadaskis</a>
+      &middot; <em>&ldquo;Happiness to everyone!&rdquo;</em>
+    </p>
+  </footer>
+
+</body>
+</html>

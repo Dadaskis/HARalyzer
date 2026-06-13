@@ -98,6 +98,12 @@ These are **not** required for end users who receive a built installer from `exp
 
 - [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS
 
+  **Arch Linux:**
+  ```bash
+  sudo pacman -S nodejs npm base-devel curl webkit2gtk-4.1 gtk3 librsvg patchelf
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+
 ## Setup
 
 ```bash
@@ -107,7 +113,7 @@ setup.bat
 # macOS (first time — installs npm deps, checks Xcode CLT / Node / Rust)
 chmod +x setup-macos.sh && ./setup-macos.sh
 
-# Linux (Arch example in script)
+# Linux (runs on Arch, Debian/Ubuntu, Fedora)
 chmod +x setup.sh && ./setup.sh
 
 # Or manually (any OS)
@@ -145,7 +151,7 @@ export.bat
 # macOS (must run on a Mac — produces .dmg + .app)
 chmod +x export-macos.sh && ./export-macos.sh
 
-# Linux
+# Linux (Arch, Debian/Ubuntu, Fedora)
 chmod +x export.sh && ./export.sh
 ```
 
@@ -209,10 +215,10 @@ HARalyzer/
 ├── src-tauri/                # Rust backend (Tauri)
 ├── export.bat                # Windows → export/
 ├── export-macos.sh           # macOS → export/ (.dmg + .app)
-├── export.sh                 # Linux → export/
+├── export.sh                 # Linux → export/ (Arch, Debian/Ubuntu, Fedora)
 ├── setup.bat                 # Windows dev setup
 ├── setup-macos.sh            # macOS dev setup
-├── setup.sh                  # Linux dev setup (Arch example)
+├── setup.sh                  # Linux dev setup (Arch, Debian/Ubuntu, Fedora)
 └── export/                   # Built installers (generated, gitignored)
 ```
 
